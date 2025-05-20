@@ -1,7 +1,6 @@
 import { DataReady, EXPECTED_DATA, externalAPI } from "./controller.js";
 import { initEvents, checkLikeDislike, externalApiOn, externalApiOff, } from "./api-utils.js";
 import { State, Toggles, Tracks } from "./extracted-data.js";
-import { ExData } from "./extracted-data.js";
 
 if (!window.externalAPI) { window.externalAPI = externalAPI; }
 
@@ -120,6 +119,4 @@ function generateApi () {
     externalAPI.populate = (fromIndex, after, before, ordered) => { } // todo
 
     initEvents();
-
-    window.ExData = ExData;
 }
