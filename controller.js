@@ -86,7 +86,6 @@ const replaceWebpackChunk = () => {
                     entries[1](e, t, i); // originFn
                     for (const prop of Object.keys(t)) {
                         if (!t[prop]?.prototype?.setEntityByIndex) continue;
-                        console.log("setEntityByIndex");
                         const setVolume = t[prop].prototype.setVolume;
                         t[prop].prototype.setVolume = async function (v) {
                             DataReady.set(EXPECTED_DATA, this);
