@@ -405,8 +405,9 @@ const Toggles = {
     },
 }
 
-Object.defineProperty(externalAPI, "dev", {
-    value: { Controller, ExtractedData, State, Tracks, Toggles }
-});
+Object.setPrototypeOf(externalAPI, Object.defineProperties({}, {
+    uploadTracksMeta: { value: Tracks.uploadTracksMeta, enumerable: true },
+    dev: { value: { Controller, ExtractedData, State, Tracks, Toggles } }
+}));
 
 export { State, Tracks, Toggles }

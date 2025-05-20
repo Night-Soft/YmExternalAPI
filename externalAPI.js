@@ -95,7 +95,6 @@ function generateApi () {
     externalAPI.getSpeed = State.getSpeed;
     externalAPI.getTrackIndex = () => { return State.index; }
     externalAPI.getTracksList = () => { return Tracks.converted; }
-    externalAPI.uploadTracksMeta = Tracks.uploadTracksMeta;
 
     externalAPI.getVolume = State.getVolume
     externalAPI.isPlaying = State.isPlaying;
