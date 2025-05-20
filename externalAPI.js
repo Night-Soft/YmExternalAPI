@@ -1,6 +1,7 @@
 import { DataReady, EXPECTED_DATA, externalAPI } from "./controller.js";
 import { initEvents, checkLikeDislike, externalApiOn, externalApiOff, } from "./api-utils.js";
 import { State, Toggles, Tracks } from "./extracted-data.js";
+import { ExData } from "./extracted-data.js";
 
 if (!window.externalAPI) { window.externalAPI = externalAPI; }
 
@@ -13,7 +14,7 @@ function generateApi () {
 
     externalAPI.on = externalApiOn;
     externalAPI.off = externalApiOff;
-
+// todo replace all fn
     externalAPI.getControls = () => {
         const repeatModes = {
             "none": false,
@@ -69,7 +70,7 @@ function generateApi () {
                 id: ""
             }
         }
-        const {
+        let {
             id: playlistId,
             playlistUuid: link,
             cover,
@@ -77,6 +78,12 @@ function generateApi () {
             title,
             type
         } = playlist;
+        
+        if (type === "vibe") {
+            type = "radio";
+            playlistId = undefined;
+        }
+
         return {
             cover: cover ? cover.uri : "",
             owner: owner ? owner.name : "",
@@ -113,4 +120,6 @@ function generateApi () {
     externalAPI.populate = (fromIndex, after, before, ordered) => { } // todo
 
     initEvents();
+
+    window.ExData = ExData;
 }
