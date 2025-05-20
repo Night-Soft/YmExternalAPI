@@ -2,22 +2,25 @@ import { Controller } from "./controller.js";
 import { ExecutionDelay, customEvents } from "./utils.js";
 import { State, Tracks } from "./extracted-data.js";
 
+const TrackControls = class {
+    constructor() {
+        const controls = {
+            get next() { return externalAPI.getNextTrack() ? true : false },
+            get prev() { return externalAPI.getPrevTrack() ? true : false }
+        }
+        const controlsPrev = { ...controls }
 
-function checkForEventControls() {
-    const controls = {
-        get next() { return externalAPI.getNextTrack() ? true : false },
-        get prev() { return externalAPI.getPrevTrack() ? true : false }
-    }
-    const controlsPrev = { ...controls }
+        Object.defineProperty(this, "isChange", {
+            get() {
+                const { next, prev } = controls;
+                if (controlsPrev.next === next && controlsPrev.prev === prev) return false;
 
-    return () => {
-        const { next, prev } = controls;
-        if (controlsPrev.next === next && controlsPrev.prev === prev) return false;
+                controlsPrev.next = next;
+                controlsPrev.prev = prev;
 
-        controlsPrev.next = next;
-        controlsPrev.prev = prev;
-
-        return true;
+                return true;
+            }
+        });
     }
 }
 
@@ -32,12 +35,18 @@ export const initEvents = () => {
 
 export const checkLikeDislike = new ExecutionDelay(() => {
     if (!Tracks.current) return;
+    
     const changeList = [];
     Tracks.converted.forEach((track, index) => {
         if (!track) return;
 
-        const currentLike = State.getTrackLiked(Tracks.getMetaByIndex(index).id);
-        const currentDislike = State.getTrackDisliked(Tracks.getMetaByIndex(index).id);
+        let queueIndex = index;
+        if (State.isVibe) {
+            queueIndex = Tracks.primary.length - Tracks.converted.length + index;
+        }
+
+        const currentLike = State.getTrackLiked(Tracks.getMetaByIndex(queueIndex).id);
+        const currentDislike = State.getTrackDisliked(Tracks.getMetaByIndex(queueIndex).id);
 
         if (track.liked !== currentLike) {
             track.liked = currentLike;
@@ -51,7 +60,7 @@ export const checkLikeDislike = new ExecutionDelay(() => {
 
     if (changeList.length === 0) return;
 
-    const isChangeLike = changeList.includes(State.index);
+    const isChangeLike = changeList.includes(State.index); // todo check index
     isChangeLike && customEvents.execute(externalAPI.EVENT_CONTROLS);
 
     const needTracksListEvent =
@@ -62,7 +71,7 @@ export const checkLikeDislike = new ExecutionDelay(() => {
 
 }, { delay: 700 }).start;
 
-const eventsPath = {
+const stateEvents = {
     get progress() { return Controller.state.playerState.progress },
     get ratechange() { return Controller.state.playerState.speed },
     get state() { return Controller.state.playerState.status },
@@ -74,10 +83,28 @@ const eventsPath = {
     get shuffle() { return Controller.state.queueState.shuffle },
 }
 
+const apiEventTypes = new Set([
+    "advert",
+    "controls",
+    "init",
+    "info",
+    "state",
+    "track",
+    "tracks",
+    "progress",
+    "ratechange",
+    "volumechange"
+]);
+
 const onChangeList = new Set();
 let isApiReady = true;
 
 export const externalApiOn = (type, listener) => {
+    if (!apiEventTypes.has(type)) {
+        console.warn(`Wrong event type or event not available! Type: '${type}'`);
+        return;
+    }
+
     customEvents.on(type, listener);
     if (onChangeList.has(type)) return;
 
@@ -91,19 +118,19 @@ export const externalApiOn = (type, listener) => {
         case externalAPI.EVENT_CONTROLS:
             const onControls = () => { customEvents.execute(type); };
 
-            eventsPath["repeat"].onChange(onControls);
-            eventsPath["shuffle"].onChange(onControls);
+            stateEvents["repeat"].onChange(onControls);
+            stateEvents["shuffle"].onChange(onControls);
 
             onChangeList.add(type);
             break;
 
         case externalAPI.EVENT_TRACK:
-            eventsPath[type].onChange(() => {
+            const trackControls = new TrackControls();
+            stateEvents[type].onChange(() => {
                 Tracks.updateConverted();
                 customEvents.execute(type);
 
-                const isControls = checkForEventControls();
-                if (isControls()) customEvents.execute(externalAPI.EVENT_CONTROLS);
+                if (trackControls.isChange) customEvents.execute(externalAPI.EVENT_CONTROLS);
             });
 
             onChangeList.add(type);
@@ -111,9 +138,12 @@ export const externalApiOn = (type, listener) => {
 
         case externalAPI.EVENT_TRACKS_LIST:
             let prevPlaylistId;
-            eventsPath[type].onChange(() => {
+            stateEvents[type].onChange(() => {
                 const currentPlalistId = State.playlist?.id;
-                if (prevPlaylistId === currentPlalistId) return;
+                const isVibe = State.isVibe;
+
+                if (!isVibe && prevPlaylistId === currentPlalistId) return;
+
                 prevPlaylistId = currentPlalistId;
 
                 Tracks.clearConverted();
@@ -127,7 +157,7 @@ export const externalApiOn = (type, listener) => {
             break;
 
         case externalAPI.EVENT_STATE:
-            eventsPath[type].onChange((ev) => {
+            stateEvents[type].onChange((ev) => {
                 if (ev !== "playing" && ev !== "paused") return;
                 customEvents.execute(type);
             });
@@ -139,8 +169,8 @@ export const externalApiOn = (type, listener) => {
             let currentState;
             const states = new Set(["playing", "paused", "buffering"]);
 
-            eventsPath[externalAPI.EVENT_STATE].onChange(state => currentState = state);
-            eventsPath[type].onChange(() => {
+            stateEvents[externalAPI.EVENT_STATE].onChange(state => currentState = state);
+            stateEvents[type].onChange(() => {
                 if (!states.has(currentState)) return;
                 customEvents.execute(type);
             });
@@ -150,7 +180,7 @@ export const externalApiOn = (type, listener) => {
 
         default:
             try {
-                eventsPath[type].onChange(() => { customEvents.execute(type) });
+                stateEvents[type].onChange(() => { customEvents.execute(type) });
                 onChangeList.add(type);
             } catch (error) {
                 console.warn(`Wrong event type or event not available! Type: '${type}'`);
