@@ -1,32 +1,20 @@
-const path = 'js/externalAPI/';
 const modules = ["controller.js", "utils.js", "extracted-data.js", "api-utils.js"];
 
-const addScript = function (path, fileName) {
+const addScript = async (fileName, path = 'js/externalAPI/') => {
     return new Promise((resolve) => {
         const script = document.createElement('script');
         script.src = chrome.runtime.getURL(path + fileName);
         script.type = "module";
-        //script.async = false;
         script.onload = function () {
-            // console.log(`Script loaded: ${fileName}!`);
+            //console.log(`Script loaded: ${fileName}!`);
             this.remove();
             resolve();
         }
         document.documentElement.appendChild(script);
     });
-};
+}
 
-const promises = [];
-(async () => {
-     for(const file of modules) {
-         const promise = addScript(path, file);
-         promises.push(promise);
-         await promise;
-     }
-})();
-// todo promises
-document.addEventListener("DOMContentLoaded", async () => {
-    await Promise.all(promises);
-    addScript(path, "externalAPI.js");
-
+const modulesLoaded = Promise.all(modules.map(module => addScript(module)));
+document.addEventListener("DOMContentLoaded", () => {
+    modulesLoaded.then(() => addScript("externalAPI.js"));
 });
