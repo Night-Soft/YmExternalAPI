@@ -11,7 +11,7 @@
 
 
 ## Интеграция в расширение Chrome
-Убедитесь, что вы подключаете add-API.js с параметром run_at: "document_start" в manifest.json, чтобы API был доступен до загрузки плеера:
+Убедитесь, что вы подключаете `add-API.js` с параметром `run_at: "document_start"` в `manifest.json`:
 ```json
 {
   "name": "Yandex Music API Extension",
