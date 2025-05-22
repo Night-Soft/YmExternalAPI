@@ -11,7 +11,7 @@ externalAPI.on(externalAPI.EVENT_TRACK, () => {
 
 const updateVibePlaylist = new ExecutionDelay(() => {
     Controller.contextController.currentContext.onMoveForward(Controller);
-}, { delay: 5000, isThrottle: true }).start;
+}, { delay: 7000, isThrottle: true, leading: true}).start;
 
 
 const ExtractedData = {
@@ -68,6 +68,11 @@ const State = {
     get isVibe() {
         if (!State.playlist) return null;
         return State.playlist.type === "vibe";
+    },
+    get vibeTitle() {
+        if (!this.isVibe) return null;
+        if (!this.currentContext.contextData.meta?.session) return null;
+        return this.currentContext.contextData.meta.session.wave.name;
     },
     get queueState() {
         if (!Controller.state) return null;

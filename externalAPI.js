@@ -80,14 +80,15 @@ function generateApi () {
         
         if (type === "vibe") {
             type = "radio";
+            title = State.vibeTitle;
             playlistId = undefined;
         }
 
         return {
             cover: cover ? cover.uri : "",
             owner: owner ? owner.name : "",
-            link,
-            title,
+            link: link ? link : "",
+            title: title ? title : "",
             type,
             playlistId
         }
@@ -114,7 +115,7 @@ function generateApi () {
     externalAPI.toggleShuffle = Toggles.toggleShuffle;
 
     externalAPI.help = () => { }
-    externalAPI.navigate = (url) => { }
+    externalAPI.navigate = (url) => { next.router.push(url); }
     externalAPI.populate = (fromIndex, after, before, ordered) => { } // todo
 
     initEvents();
