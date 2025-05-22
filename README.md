@@ -20,7 +20,7 @@
   "content_scripts": [
     {
       "matches": ["https://music.yandex.ru/*"],
-      "js": ["add-API.js"],
+      "js": ["content-script/add-API.js"],
       "run_at": "document_start"
     }
   ]
