@@ -137,14 +137,15 @@ export const externalApiOn = (type, listener) => {
             break;
 
         case externalAPI.EVENT_TRACKS_LIST:
-            let prevPlaylistId;
+            //let prevPlaylistId;
             stateEvents[type].onChange(() => {
-                const currentPlalistId = State.playlist?.id;
-                const isVibe = State.isVibe;
+                // todo compare source
 
-                if (!isVibe && prevPlaylistId === currentPlalistId) return;
-
-                prevPlaylistId = currentPlalistId;
+                // const currentPlalistId = State.playlist?.id;
+                // const isVibe = State.isVibe;
+                
+                // if (!isVibe && prevPlaylistId === currentPlalistId) return;
+                // prevPlaylistId = currentPlalistId;
 
                 Tracks.clearConverted();
                 Tracks.updateConverted();

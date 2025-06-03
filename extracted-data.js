@@ -1,17 +1,18 @@
 import { externalAPI, Controller } from "./controller.js";
-import { ExecutionDelay, customEvents} from "./utils.js";
+import { ExecutionDelay, customEvents } from "./utils.js";
 
 const NUMBER_OF_VIBE_TRACKS = 7;
 
 const nextPrevProm = new Set();
 externalAPI.on(externalAPI.EVENT_TRACK, () => {
-    nextPrevProm.forEach(resolve => resolve());
+    if (nextPrevProm.size === 0) return;
+    nextPrevProm.forEach(resolve => resolve(true));
     nextPrevProm.clear();
 });
 
 const updateVibePlaylist = new ExecutionDelay(() => {
     Controller.contextController.currentContext.onMoveForward(Controller);
-}, { delay: 7000, isThrottle: true, leading: true}).start;
+}, { delay: 7000, isThrottle: true, leading: true }).start;
 
 
 const ExtractedData = {
@@ -91,7 +92,7 @@ const State = {
         if (this.queueIndex === -1) return -1;
         if (this.playlist?.type !== "vibe") return this.queueIndex;
         if (NUMBER_OF_VIBE_TRACKS > Tracks.primary.length) return this.queueIndex;
-        return this.queueIndex - (Tracks.primary.length - NUMBER_OF_VIBE_TRACKS ); 
+        return this.queueIndex - (Tracks.primary.length - NUMBER_OF_VIBE_TRACKS);
     },
     /** @returns {boolean} */
     getRepeat() {
@@ -105,7 +106,7 @@ const State = {
     },
     /** @returns {boolean} */
     isPlaying() {
-        return State.playerState.state === "playing"; 
+        return State.playerState.state === "playing";
     },
     /** @returns {number} seconds*/
     getPosition() {
@@ -183,46 +184,72 @@ const Tracks = {
             })
         }
     },
+    _updateVibeList() {
+        const start = this.primary.length - NUMBER_OF_VIBE_TRACKS;
+
+        if (start < 0) {
+            this._converted = this.primary.map(item => {
+                return this.convertTrack(item.entity.entityData.meta);
+            });
+            return;
+        }
+
+        if (this.primary.length >= this.converted.length) {
+            for (let i = 0, j = start; i < this.converted.length; i++, j++) {
+                const title = this.primary[j].entity.entityData.meta.title;
+                if (title !== this.converted[i].title) break;
+                return;
+            }
+        }
+
+        this._converted = [];
+        for (let i = start; i < this.primary.length; i++) {
+            const track = this.convertTrack(this.primary[i].entity.entityData.meta);
+            this._converted.push(track);
+        }
+    },
+    _updateRegularList() {
+        let start = 0;
+        // todo
+        if (this.primary.length === this.converted.length) {
+            for (let i = 0; i < this.converted.length; i++) {
+                if (this.primary[i] === null && this.converted[i] === null) continue;
+
+                const title = this.primary[i]?.entity.entityData.meta.title;
+                if (title === this.converted[i]?.title) continue;
+                if (title && this.converted[i] === null) {
+                    start = i;
+                    break;
+                }
+
+                this._converted = [];
+                break;
+            }
+        } else {
+            this._converted = [];
+        }
+
+        for (let index = start; index < this.primary.length; index++) {
+            if (this.converted[index]) continue;
+            const entityData = this.primary[index].entity.entityData;
+            if (entityData.type === "unloaded") {
+                this.converted[index] = null;
+                continue;
+            };
+
+            this.converted[index] = this.convertTrack(entityData.meta);
+        }
+    },
     updateConverted() {
         if (!this.primary) return null;
 
         if (State.isVibe) {
-            const start = Tracks.primary.length - NUMBER_OF_VIBE_TRACKS;
-
-            if (start < 0) {
-                return this._converted = this.primary.map(item => {
-                    return this.convertTrack(item.entity.entityData.meta);
-                });
-            }
-
-            if (this.primary.length >= this.converted.length) {
-                for (let i = 0, j = start; i < this.converted.length; i++, j++) {
-                    const title = this.primary[j].entity.entityData.meta.title;
-                    if (title !== this.converted[i].title) break;
-                    return this._converted;
-                }
-            }
-
-            this._converted = [];
-            for (let i = start; i < this.primary.length; i++) {
-                const track = this.convertTrack(this.primary[i].entity.entityData.meta);
-                this._converted.push(track);
-            }
+            this._updateVibeList();
             return this._converted;
         }
 
-        this.primary.forEach((item, index) => {
-            if (this.converted[index]) return;
-
-            if (item.entity.entityData.type === "unloaded") {
-                this.converted[index] = null;
-                return;
-            };
-
-            this.converted[index] = this.convertTrack(item.entity.entityData.meta);
-        });
-
-        return this.converted;
+        this._updateRegularList();
+        return this._converted;
     },
     _converted: [],
     get converted() { return this._converted; },
@@ -254,11 +281,11 @@ const Tracks = {
         if (direction === undefined) return;
         const { unloadedTracks, indexes } = Tracks.getUnloadedTracks(30, direction);
         if (indexes.length === 0) return;
-        
+
         ExtractedData.loadEntities(unloadedTracks).then(tracks => {
             const entities = ExtractedData.createEntities(tracks);
-            indexes.forEach((indexOriginal, index) => { 
-                Tracks.primary[indexOriginal].entity = entities[index]; 
+            indexes.forEach((indexOriginal, index) => {
+                Tracks.primary[indexOriginal].entity = entities[index];
             });
             Tracks.updateConverted();
             customEvents.execute(externalAPI.EVENT_TRACKS_LIST);
@@ -271,7 +298,7 @@ const Toggles = {
     async next() {
         if (State.isVibe) return Toggles.play(State.index + 1);
         if (!externalAPI.getControls().next) return Promise.resolve();
-        return new Promise((resolve)=> {
+        return new Promise((resolve) => {
             nextPrevProm.add(resolve);
             Controller.moveForward();
         });
@@ -284,7 +311,7 @@ const Toggles = {
         if (!externalAPI.getControls().prev) return Promise.resolve();
         return new Promise((resolve) => {
             nextPrevProm.add(resolve);
-            Controller.moveBackward();    
+            Controller.moveBackward();
         });
     },
     /** @returns {void} */
@@ -294,7 +321,7 @@ const Toggles = {
     /** @returns {void} */
     setVolume(value) { Controller.setVolume(value); },
     /** @returns {void} */
-    toggleTrackLike() { 
+    toggleTrackLike() {
         if (!Toggles.likeDislikeData.userId) {
             console.warn("userId not available");
             return;
@@ -309,14 +336,14 @@ const Toggles = {
             console.warn("userId not available");
             return;
         }
-        
+
         ExtractedData.likeStore.toggleTrackDisike(Toggles.likeDislikeData);
         Tracks.current.disliked = State.getTrackDisliked(Tracks.currentId);
 
     },
     _prevVolume: 1,
     /** @returns {void} */
-    toggleMute(state) { 
+    toggleMute(state) {
         if (state !== undefined) {
             Controller.setVolume(state ? 0 : Toggles._prevVolume);
             return;
@@ -331,16 +358,10 @@ const Toggles = {
     },
     /** @returns {void} */
     togglePause(state) {
-        if (state) {
-            if (State.isPlaying) {
-                Controller.togglePause(); // set to pause
-                return;
-            }
-        } else if (state !== undefined) {
-            if (State.isPlaying == false) {
-                Controller.togglePause(); // set to play
-                return;
-            }
+        if (state !== undefined) {
+            if (Boolean(state) === !State.isPlaying()) return;
+            (state ? Controller.pause() : Controller.resume())
+            return;         
         }
         Controller.togglePause();
     },
@@ -349,7 +370,7 @@ const Toggles = {
         Controller.toggleShuffle();
     },
     /** @returns {void} */
-    toggleRepeat(state) { 
+    toggleRepeat(state) {
         const repeatModes = {
             undefined: "none",
             false: "none",
@@ -368,6 +389,12 @@ const Toggles = {
     /** @returns {Promise} */
     async play(index) {
         return new Promise((resolve) => {
+            if (index === undefined) {
+                this.setPosition(0);
+                this.togglePause(false) // resume
+                return resolve(true);
+            }
+
             nextPrevProm.add(resolve);
 
             if (State.isVibe) {
@@ -384,9 +411,9 @@ const Toggles = {
                 return;
             }
 
-            Controller.playContext(Toggles.createPlayContext(index));
+            Controller.queueController.setIndex(index);
         });
-        
+
     },
     /** @returns {object} */
     createPlayContext(index) {
