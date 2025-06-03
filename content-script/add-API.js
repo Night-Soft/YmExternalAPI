@@ -1,6 +1,6 @@
 const modules = ["controller.js", "utils.js", "extracted-data.js", "api-utils.js"];
 
-const addScript = async (fileName, path = 'js/externalAPI/') => {
+const addScript = async (fileName, path = '') => {
     return new Promise((resolve) => {
         const script = document.createElement('script');
         script.src = chrome.runtime.getURL(path + fileName);
