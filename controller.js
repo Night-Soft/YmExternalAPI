@@ -20,7 +20,7 @@ export const externalAPI = {
         this.events.get(type).add(listener);
     }
 }
-export const EXPECTED_DATA = "controller";
+export const EXPECTED_DATA = ["controller", 'playbackController'];
 
 export const DataReady = {
     waitingList: new Map(),
@@ -69,15 +69,14 @@ export const DataReady = {
     }
 }
 
-export const Controller = {};
-
-DataReady.ready(({ controller }) => {
-    Object.assign(Controller, controller);
-    Object.setPrototypeOf(Controller, Object.getPrototypeOf(controller));
-}, false, EXPECTED_DATA);
-
 const replaceWebpackChunk = () => {
     let push;
+    let isDataReady = false;
+
+    DataReady.ready(() => {
+        isDataReady = true
+        self.webpackChunk_N_E.push = push; 
+    }, true, ...EXPECTED_DATA);
 
     const pushOverload = function (e, ...args) {
         if (Array.isArray(e)) {
@@ -85,15 +84,25 @@ const replaceWebpackChunk = () => {
                 e[1][entries[0]] = function (e, t, i) {
                     entries[1](e, t, i); // originFn
                     for (const prop of Object.keys(t)) {
+
+                        if (isDataReady) return; 
+
+                        if (t[prop]?.prototype?.createAudioAdvertPlayback) {
+                            const createAudioAdvertPlayback = t[prop].prototype.createAudioAdvertPlayback;
+                            t[prop].prototype.createAudioAdvertPlayback = function (playback) {
+                                DataReady.set(EXPECTED_DATA[1], playback); // playbackController
+                                createAudioAdvertPlayback.call(this, playback);
+                            }
+                        }
+
                         if (!t[prop]?.prototype?.setEntityByIndex) continue;
+
                         const setVolume = t[prop].prototype.setVolume;
                         t[prop].prototype.setVolume = async function (v) {
-                            DataReady.set(EXPECTED_DATA, this);
+                            DataReady.set(EXPECTED_DATA[0], this); // controller
                             setVolume.call(this, v);
                             t[prop].prototype.setVolume = setVolume;
                         }
-                        self.webpackChunk_N_E.push = push;
-                        break;
                     }
                 }
             }
