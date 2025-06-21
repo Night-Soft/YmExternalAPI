@@ -247,5 +247,35 @@ function CustomEvents() {
     this.has = (type) => { return this.events.has(type); }
 }
 
+class MethodInterceptor {
+    constructor(targetObjects, interceptor) {
+        const interceptedObjects = {};
+        for (const objectName in targetObjects) {
+            interceptedObjects[objectName] = this.#wrapMethods(targetObjects[objectName], interceptor);
+        }
+        return interceptedObjects;
+    }
+
+    #wrapMethods(targetObject, interceptor) {
+        const methodCache = new Map();
+
+        return new Proxy(targetObject, {
+            get(originalObject, property) {
+                const method = originalObject[property];
+
+                if (typeof method !== "function") return method;
+                if (methodCache.has(property)) return methodCache.get(property);
+
+                const wrappedMethod = (...args) => {
+                    return interceptor.apply(originalObject, [method, ...args]);
+                };
+
+                methodCache.set(property, wrappedMethod);
+                return wrappedMethod;
+            }
+        });
+    }
+}
+
 const customEvents = new CustomEvents();
-export { ExecutionDelay, customEvents };
+export { ExecutionDelay, MethodInterceptor, customEvents };

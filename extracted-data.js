@@ -1,5 +1,14 @@
-import { externalAPI, Controller } from "./controller.js";
-import { ExecutionDelay, customEvents } from "./utils.js";
+import { externalAPI, DataReady, EXPECTED_DATA } from "./controller.js";
+import { ExecutionDelay, MethodInterceptor, customEvents } from "./utils.js";
+
+export const Controller = {};
+
+DataReady.ready(({ controller, playbackController: playback }) => {
+    console.log("create Controller", Controller);
+    Object.assign(Controller, controller);
+    Object.setPrototypeOf(Controller, Object.getPrototypeOf(controller));
+    ExtractedData.playback = playback;
+}, false, ...EXPECTED_DATA);
 
 const NUMBER_OF_VIBE_TRACKS = 7;
 
@@ -32,8 +41,13 @@ const ExtractedData = {
         return this.queueController.entityLoader.entityProvider.loadEntities(entities);
     },
     createEntities(entities) {
-        if (!this.queueController) return null;
+        if (!this.queueController) return null
         return this.queueController.contextController.createEntities(entities);
+    },
+    callIfUnblocked(callback, ...args) {
+        return ExtractedData.playback.playbackController.callIfUnblocked(() => {
+           return callback.apply(this, args);
+        });
     }
 }
 
@@ -300,28 +314,33 @@ const Toggles = {
         if (!externalAPI.getControls().next) return Promise.resolve();
         return new Promise((resolve) => {
             nextPrevProm.add(resolve);
-            Controller.moveForward();
+            unblockedController.moveForward();
         });
     },
     /** @returns {Promise} */
     async prev() {
-        if (State.isVibe && State.index > 0) {
-            return Toggles.play(State.index - 1);
+        if (State.isVibe) {
+            if (State.index === 0) {
+                Toggles.setPosition(0);
+                Toggles.togglePause(false);
+                return Promise.resolve();
+            }
+            return Toggles.play(State.index - 1); // todo
         }
         if (!externalAPI.getControls().prev) return Promise.resolve();
         return new Promise((resolve) => {
             nextPrevProm.add(resolve);
-            Controller.moveBackward();
+            unblockedController.moveBackward();
         });
     },
     /** @returns {void} */
-    setPosition(value) { Controller.setProgress(value); },
+    setPosition(value) { unblockedController.setProgress(value); },
     /** @returns {void} */
-    setSpeed(value) { Controller.setSpeed(value); },
+    setSpeed(value) { unblockedController.setSpeed(value); },
     /** @returns {void} */
-    setVolume(value) { Controller.setVolume(value); },
+    setVolume(value) { unblockedController.setVolume(value); },
     /** @returns {void} */
-    toggleTrackLike() {
+    toggleTrackLike() { // todo call if unblocked
         if (!Toggles.likeDislikeData.userId) {
             console.warn("userId not available");
             return;
@@ -345,29 +364,33 @@ const Toggles = {
     /** @returns {void} */
     toggleMute(state) {
         if (state !== undefined) {
-            Controller.setVolume(state ? 0 : Toggles._prevVolume);
+            Toggles.setVolume(state ? 0 : Toggles._prevVolume);
             return;
         }
 
         if (externalAPI.getVolume() > 0) {
             Toggles._prevVolume = externalAPI.getVolume();
-            Controller.setVolume(0);
+            Toggles.setVolume(0);
         } else {
-            Controller.setVolume(Toggles._prevVolume);
+            Toggles.setVolume(Toggles._prevVolume);
         }
     },
     /** @returns {void} */
     togglePause(state) {
         if (state !== undefined) {
             if (Boolean(state) === !State.isPlaying()) return;
-            (state ? Controller.pause() : Controller.resume())
+            if (state) {
+                unblockedController.pause();
+            } else {
+                unblockedController.resume();
+            }
             return;         
         }
-        Controller.togglePause();
+        unblockedController.togglePause();
     },
     /** @returns {void} */
     toggleShuffle() {
-        Controller.toggleShuffle();
+        unblockedController.toggleShuffle();
     },
     /** @returns {void} */
     toggleRepeat(state) {
@@ -384,36 +407,57 @@ const Toggles = {
             if (currentMode === "context") state = 1;
             if (currentMode === "one") state = false;
         }
-        Controller.setRepeatMode(repeatModes[state]);
+        unblockedController.setRepeatMode(repeatModes[state]);
     },
     /** @returns {Promise} */
     async play(index) {
-        return new Promise((resolve) => {
-            if (index === undefined) {
-                this.setPosition(0);
-                this.togglePause(false) // resume
-                return resolve(true);
+        return new Promise((resolve, reject) => {
+            switch (index) {
+                case undefined:
+                    Toggles.setPosition(0);
+                    Toggles.togglePause(false) // resume
+                    resolve(true);
+                    return;
+
+                case State.index:
+                    Toggles.togglePause();
+                    resolve(true);
+                    return;
             }
 
-            nextPrevProm.add(resolve);
+            if (index > Tracks.primary.length - 1) index = Tracks.primary.length - 1;
+            if (index < 0) index = 0;
 
+            nextPrevProm.add(resolve);
+            
+            let result;
             if (State.isVibe) {
                 if (NUMBER_OF_VIBE_TRACKS < Tracks.primary.length) {
                     index = Tracks.primary.length - NUMBER_OF_VIBE_TRACKS + index;
                 }
                 if (index === Tracks.primary.length - 1) {
-                    Controller.queueController.playerQueue.state.index.value = index;
-                    updateVibePlaylist();
+                    result = unblockedToggles._setQueueIndexValue(index);
+                    ExtractedData.callIfUnblocked(updateVibePlaylist);
+                    Toggles._rejectPlay(reject, result);
                     return;
                 }
                 // track switches without updating the tracklist
-                Controller.queueController.playerQueue.state.index.value = index;
+                result = unblockedToggles._setQueueIndexValue(index);
+                Toggles._rejectPlay(reject, result);
                 return;
             }
 
-            Controller.queueController.setIndex(index);
+            result = unblockedController.playContext(Toggles.createPlayContext(index));
+            Toggles._rejectPlay(reject, result);
         });
 
+    },
+    _rejectPlay(reject, result) { result?.catch(reject); },
+    _setQueueIndex(index) {
+        Controller.queueController.setIndex(index);
+    },
+    _setQueueIndexValue(index) {
+        Controller.queueController.playerQueue.state.index.value = index;
     },
     /** @returns {object} */
     createPlayContext(index) {
@@ -436,6 +480,12 @@ const Toggles = {
         }
     },
 }
+
+// use only for method calls
+const {
+    Controller: unblockedController,
+    Toggles: unblockedToggles
+} = new MethodInterceptor({ Controller, Toggles }, ExtractedData.callIfUnblocked);
 
 Object.setPrototypeOf(externalAPI, Object.defineProperties({}, {
     uploadTracksMeta: { value: Tracks.uploadTracksMeta, enumerable: true },
