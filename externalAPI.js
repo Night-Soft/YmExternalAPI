@@ -4,10 +4,9 @@ import { State, Toggles, Tracks } from "./extracted-data.js";
 
 if (!window.externalAPI) { window.externalAPI = externalAPI; }
 
-DataReady.ready(generateApi, true, EXPECTED_DATA);
+DataReady.ready(generateApi, true, ...EXPECTED_DATA);
 
 function generateApi () {
-
     // Check if the number of likes or dislikes on the playlist has changed.
     document.body.onclick = checkLikeDislike;
 
@@ -114,7 +113,7 @@ function generateApi () {
     externalAPI.toggleRepeat = Toggles.toggleRepeat;
     externalAPI.toggleShuffle = Toggles.toggleShuffle;
 
-    externalAPI.help = () => { }
+    externalAPI.help = () => { console.log("https://github.com/Night-Soft/YmExternalAPI") }
     externalAPI.navigate = (url) => { next.router.push(url); }
     externalAPI.populate = (fromIndex, after, before, ordered) => { } // todo
 

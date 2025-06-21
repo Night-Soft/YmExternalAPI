@@ -1,6 +1,5 @@
-import { Controller } from "./controller.js";
 import { ExecutionDelay, customEvents } from "./utils.js";
-import { State, Tracks } from "./extracted-data.js";
+import { State, Tracks, Controller } from "./extracted-data.js";
 
 const TrackControls = class {
     constructor() {
@@ -139,13 +138,7 @@ export const externalApiOn = (type, listener) => {
         case externalAPI.EVENT_TRACKS_LIST:
             //let prevPlaylistId;
             stateEvents[type].onChange(() => {
-                // todo compare source
-
-                // const currentPlalistId = State.playlist?.id;
-                // const isVibe = State.isVibe;
-                
-                // if (!isVibe && prevPlaylistId === currentPlalistId) return;
-                // prevPlaylistId = currentPlalistId;
+                // todo add compare source before cleaning
 
                 Tracks.clearConverted();
                 Tracks.updateConverted();

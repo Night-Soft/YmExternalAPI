@@ -4,7 +4,6 @@ import { ExecutionDelay, MethodInterceptor, customEvents } from "./utils.js";
 export const Controller = {};
 
 DataReady.ready(({ controller, playbackController: playback }) => {
-    console.log("create Controller", Controller);
     Object.assign(Controller, controller);
     Object.setPrototypeOf(Controller, Object.getPrototypeOf(controller));
     ExtractedData.playback = playback;
