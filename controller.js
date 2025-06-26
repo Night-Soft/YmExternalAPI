@@ -95,13 +95,13 @@ const replaceWebpackChunk = () => {
                             }
                         }
 
-                        if (!t[prop]?.prototype?.setEntityByIndex) continue;
+                        if (!t[prop]?.prototype?.setExponentVolume) continue;
 
-                        const setVolume = t[prop].prototype.setVolume;
-                        t[prop].prototype.setVolume = async function (v) {
+                        const setExponentVolume = t[prop].prototype.setExponentVolume;
+                        t[prop].prototype.setExponentVolume = function (v) {
                             DataReady.set(EXPECTED_DATA[0], this); // controller
-                            setVolume.call(this, v);
-                            t[prop].prototype.setVolume = setVolume;
+                            t[prop].prototype.setExponentVolume = setExponentVolume;
+                            return setExponentVolume.call(this, v);
                         }
                     }
                 }
