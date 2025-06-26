@@ -17,6 +17,7 @@
                 "https://music.yandex.ua/*",
                 "https://music.yandex.ru/*",
                 "https://music.yandex.by/*",
+                "https://music.yandex.kz/*",
                 "https://avatars.yandex.net/*"
             ]
         }
@@ -27,6 +28,7 @@
                 "https://music.yandex.ua/*",
                 "https://music.yandex.ru/*",
                 "https://music.yandex.by/*",
+                "https://music.yandex.kz/*",
                 "https://avatars.yandex.net/*"
             ],
             "run_at": "document_start",
