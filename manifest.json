@@ -3,7 +3,7 @@
     "name": "Yandex Music (2025) externalAPI polyfill",
     "description": "externalAPI polyfill для нового дизайна (2025) Яндекс Музыки",
     "short_name": "YmExternalAPI",
-    "version": "1.1.1",
+    "version": "1.2.0",
     "web_accessible_resources": [
         {
             "resources": [
