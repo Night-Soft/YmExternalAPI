@@ -13,10 +13,7 @@ export const externalAPI = {
 
     events: new Map(),
     on(type, listener) {
-        if (this.events.get(type) === undefined) {
-            this.events.set(type, new Set());
-            this.events.get(type).add(listener);
-        }
+        if (this.events.get(type) === undefined) this.events.set(type, new Set());
         this.events.get(type).add(listener);
     }
 }
@@ -69,53 +66,87 @@ export const DataReady = {
     }
 }
 
-const replaceWebpackChunk = () => {
-    let push;
-    let isDataReady = false;
+const redefinedFn = ["createAudioAdvertPlayback", "setExponentVolume"];
 
-    DataReady.ready(() => {
-        isDataReady = true
-        self.webpackChunk_N_E.push = push; 
-    }, true, ...EXPECTED_DATA);
+function overrideExportsFn(exports) {
+    if (exports === undefined) return;
+    for (const key of Object.keys(exports)) {
+        if (exports[key]?.prototype?.createAudioAdvertPlayback) {
+            const createAudioAdvertPlayback = exports[key].prototype.createAudioAdvertPlayback;
+            exports[key].prototype.createAudioAdvertPlayback = function (playback) {
+                DataReady.set(EXPECTED_DATA[1], playback); // playbackController
+                createAudioAdvertPlayback.call(this, playback);
+            }
 
-    const pushOverload = function (e, ...args) {
-        if (Array.isArray(e)) {
-            for (const entries of Object.entries(e[1])) {
-                e[1][entries[0]] = function (e, t, i) {
-                    entries[1](e, t, i); // originFn
-                    for (const prop of Object.keys(t)) {
+            DataReady.set(redefinedFn[0], true);
+            if (DataReady.data.get(redefinedFn[1])) break;
+        }
 
-                        if (isDataReady) return; 
-
-                        if (t[prop]?.prototype?.createAudioAdvertPlayback) {
-                            const createAudioAdvertPlayback = t[prop].prototype.createAudioAdvertPlayback;
-                            t[prop].prototype.createAudioAdvertPlayback = function (playback) {
-                                DataReady.set(EXPECTED_DATA[1], playback); // playbackController
-                                createAudioAdvertPlayback.call(this, playback);
-                            }
-                        }
-
-                        if (!t[prop]?.prototype?.setExponentVolume) continue;
-
-                        const setExponentVolume = t[prop].prototype.setExponentVolume;
-                        t[prop].prototype.setExponentVolume = function (v) {
-                            DataReady.set(EXPECTED_DATA[0], this); // controller
-                            t[prop].prototype.setExponentVolume = setExponentVolume;
-                            return setExponentVolume.call(this, v);
-                        }
-                    }
+        if (exports[key]?.prototype?.setExponentVolume) {
+            const setExponentVolume = exports[key].prototype.setExponentVolume;
+            exports[key].prototype.setExponentVolume = function (v) {
+                if (this.id === "MAIN") {
+                    DataReady.set(EXPECTED_DATA[0], this); // controller
+                    exports[key].prototype.setExponentVolume = setExponentVolume;
                 }
+                return setExponentVolume.call(this, v);
+            }
+
+            DataReady.set(redefinedFn[1], true);
+            if (DataReady.data.get(redefinedFn[0])) break;
+        }
+    }
+}
+
+let push;
+function pushOverload(e, ...args) {
+    if (Array.isArray(e)) {
+        for (const entries of Object.entries(e[1])) {
+            e[1][entries[0]] = function (e, t, i) {
+                entries[1](e, t, i); // originFn
+                overrideExportsFn(t);
             }
         }
-        push(e, ...args);
+    }
+    push(e, ...args);
+}
+
+function getRequire() {
+    let getExports, moduleFn = {};
+
+    const checkModuleFn = (fn) => {
+        return (
+            typeof fn === "function" &&
+            fn.name !== "" &&
+            Number.isFinite(Number(fn.name))
+        );
     }
 
-    self.webpackChunk_N_E = new Proxy([], {
+    const chunkGetRequire = [[Math.random()], {}, (fn) => getExports = fn];
+    self.webpackChunk_N_E.push(chunkGetRequire);
+
+    for (const key in getExports) {
+        const value = getExports[key];
+
+        if (typeof value === 'object') {
+
+            const isModuleFn = Object.values(value).every(checkModuleFn);
+
+            if (!isModuleFn) continue;
+            moduleFn = value
+            break;
+        }
+    }
+
+    return { getExports, moduleFn }
+}
+const createProxy = (proxy = []) =>{
+    self.webpackChunk_N_E = new Proxy(proxy, {
         set(target, property, value) {
             if (property === "push") {
                 push = value;
                 self.webpackChunk_N_E = target;
-                self.webpackChunk_N_E.push = pushOverload;
+                self.webpackChunk_N_E.push = pushOverload
                 return true;
             }
 
@@ -123,6 +154,32 @@ const replaceWebpackChunk = () => {
             return true;
         }
     });
+}
+    DataReady.ready(() => { self.webpackChunk_N_E.push = push; }, true, ...redefinedFn);
+
+const replaceWebpackChunk = () => {
+    if (self.webpackChunk_N_E) {
+        if (self.webpackChunk_N_E.push.name === "push") {
+            createProxy(self.webpackChunk_N_E);
+        }
+
+        const { getExports, moduleFn } = getRequire();
+
+        //const emptyExportIds = []
+        Object.keys(moduleFn).forEach((id) => {
+            try {
+                overrideExportsFn(getExports(id));
+            } catch (error) { } //emptyExportIds.push(id); 
+        });
+
+        if (self.webpackChunk_N_E.push.name === "bound d") {
+            push = self.webpackChunk_N_E.push;
+            self.webpackChunk_N_E.push = pushOverload;
+        }
+
+        return;
+    }
+    createProxy();
 }
 
 replaceWebpackChunk();
