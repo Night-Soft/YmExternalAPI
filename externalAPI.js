@@ -105,6 +105,7 @@ function generateApi () {
     externalAPI.setPosition = Toggles.setPosition;
     externalAPI.setSpeed = Toggles.setSpeed;
     externalAPI.setVolume = Toggles.setVolume;
+    externalAPI.populate = Tracks.populate;
 
     externalAPI.toggleDislike = Toggles.toggleTrackDisike;
     externalAPI.toggleLike = Toggles.toggleTrackLike;
@@ -115,7 +116,6 @@ function generateApi () {
 
     externalAPI.help = () => { console.log("https://github.com/Night-Soft/YmExternalAPI") }
     externalAPI.navigate = (url) => { next.router.push(url); }
-    externalAPI.populate = (fromIndex, after, before, ordered) => { } // todo
 
     initEvents();
 }

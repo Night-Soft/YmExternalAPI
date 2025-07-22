@@ -268,20 +268,85 @@ const Tracks = {
     get converted() { return this._converted; },
     set converted(value) { this._converted = value; },
     clearConverted() { this._converted = []; },
-    getUnloadedTracks(quantity = 30, direction = "down") {
+    /**
+    * Loads track data into the current playlist starting from a specified index.
+    *
+    * @param {number} fromIndex - The index in the playlist from which to start loading tracks.
+    * @param {number} [after] - Optional. The number of tracks to load after the `fromIndex`.
+    * @param {number} [before] - Optional. The number of tracks to load before the `fromIndex`.
+    * @param {boolean} [ordered=false] - Optional. If `true`, tracks are intended to be loaded in playback order
+    * rather than list order. **Note:** This option is currently not implemented
+    *
+    * @returns {Promise<true>} A promise that resolves when the data has been loaded.
+    */
+    async populate(fromIndex, after, before, ordered) {
+        return new Promise((resolve, reject) => {
+            if (typeof fromIndex !== 'number') {
+                throw new TypeError(`'fromIndex' must be a number, but received type '${typeof fromIndex}'`);
+            }
+            if (typeof after !== 'undefined' && typeof after !== 'number') {
+                throw new TypeError(`'after' must be a number, but received type '${typeof after}'`);
+            }
+            if (typeof before !== 'undefined' && typeof before !== 'number') {
+                throw new TypeError(`'before' must be a number, but received type '${typeof before}'`);
+            }
+
+            if (after === undefined) {
+                after = 25;
+                before = 15;
+            }
+
+            const tracksSize = Tracks.primary.length - 1;
+            if (fromIndex < 0) fromIndex = 0;
+            if (fromIndex > tracksSize) fromIndex = tracksSize;
+            if (fromIndex + after > tracksSize) after = tracksSize + 1 - fromIndex;
+            if (before > fromIndex) before = fromIndex + 1;
+            
+            const {
+                unloadedTracks: afterTracks,
+                indexes: afterIndexes
+            } = Tracks.getUnloadedTracks(fromIndex, after, "down");
+
+            let beforeTracks = [], beforeIndexes = [];
+            if (Number.isInteger(before)) {
+                ; ({
+                    unloadedTracks: beforeTracks,
+                    indexes: beforeIndexes
+                } = Tracks.getUnloadedTracks(fromIndex, before, "up"))
+            }
+
+            const indexes = Array.from(new Set(afterIndexes.concat(beforeIndexes)));
+
+            if (indexes.length === 0) {
+                resolve(true);
+                return;
+            }
+
+            const unloadedTracks = Array.from(new Set(afterTracks.concat(beforeTracks)));
+
+            ExtractedData.loadEntities(unloadedTracks).then(tracks => {
+                const entities = ExtractedData.createEntities(tracks);
+                indexes.forEach((indexOriginal, index) => {
+                    Tracks.primary[indexOriginal].entity = entities[index];
+                });
+                Tracks.updateConverted();
+                resolve(true);
+            }).catch(reject);
+        });
+    },
+    getUnloadedTracks(fromIndex = State.index, quantity = 30, direction = "down") {
         const unloadedTracks = [];
         const indexes = [];
 
-        // todo add counter 
         if (direction === "up") {
-            for (let i = State.index; i >= 0; i--) {
+            for (let i = fromIndex; i >= 0; i--) {
                 if (this.primary[i].entity.entityData.type !== "unloaded") continue;
                 if (unloadedTracks.length >= quantity) break;
                 unloadedTracks.push(this.primary[i]);
                 indexes.push(i);
             }
         } else if (direction === "down") {
-            for (let i = State.index; i < this.primary.length; i++) {
+            for (let i = fromIndex; i < this.primary.length; i++) {
                 if (this.primary[i].entity.entityData.type !== "unloaded") continue;
                 if (unloadedTracks.length >= quantity) break;
                 unloadedTracks.push(this.primary[i]);
@@ -292,7 +357,7 @@ const Tracks = {
     },
     async uploadTracksMeta(direction) {
         if (direction === undefined) return;
-        const { unloadedTracks, indexes } = Tracks.getUnloadedTracks(30, direction);
+        const { unloadedTracks, indexes } = Tracks.getUnloadedTracks(State.index, 30, direction);
         if (indexes.length === 0) return;
 
         ExtractedData.loadEntities(unloadedTracks).then(tracks => {
@@ -487,7 +552,6 @@ const {
 } = new MethodInterceptor({ Controller, Toggles }, ExtractedData.callIfUnblocked);
 
 Object.setPrototypeOf(externalAPI, Object.defineProperties({}, {
-    uploadTracksMeta: { value: Tracks.uploadTracksMeta, enumerable: true },
     dev: { value: { Controller, ExtractedData, State, Tracks, Toggles } }
 }));
 
