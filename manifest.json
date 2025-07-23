@@ -3,7 +3,7 @@
     "name": "Yandex Music (2025) externalAPI polyfill",
     "description": "externalAPI polyfill для нового дизайна (2025) Яндекс Музыки",
     "short_name": "YmExternalAPI",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "web_accessible_resources": [
         {
             "resources": [
@@ -23,6 +23,19 @@
         }
     ],
     "content_scripts": [
+        {
+            "matches": [
+                "https://music.yandex.ua/*",
+                "https://music.yandex.ru/*",
+                "https://music.yandex.by/*",
+                "https://music.yandex.kz/*"
+            ],
+            "run_at": "document_start",
+            "world": "MAIN",
+            "js": [
+                "content-script/replace-webpack.js"
+            ]
+        },
         {
             "matches": [
                 "https://music.yandex.ua/*",
