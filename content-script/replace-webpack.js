@@ -52,7 +52,10 @@
     window.EXPECTED_DATA = EXPECTED_DATA;
     window.DataReady = DataReady;
 
-    DataReady.ready(() => { self.webpackChunk_N_E.push = push; }, true, ...redefinedFn);
+    DataReady.ready(() => {
+        webpackChunk_N_E.push = push;
+        self.webpackChunk_N_E = webpackChunk_N_E;
+    }, true, ...redefinedFn);
 
     function overrideExportsFn(exports) {
         if (exports === undefined) return;
@@ -83,6 +86,7 @@
             }
         }
     }
+
     let push;
     function pushOverload(e, ...args) {
         if (Array.isArray(e)) {
@@ -96,12 +100,12 @@
         push(e, ...args);
     }
 
-    self.webpackChunk_N_E = new Proxy([], {
+    const webpackChunk_N_E = [];
+    self.webpackChunk_N_E = new Proxy(webpackChunk_N_E, {
         set(target, property, value) {
             if (property === "push") {
                 push = value;
-                self.webpackChunk_N_E = target;
-                self.webpackChunk_N_E.push = pushOverload
+                target.push = pushOverload
                 return true;
             }
 
@@ -109,4 +113,5 @@
             return true;
         }
     });
+    
 })();
