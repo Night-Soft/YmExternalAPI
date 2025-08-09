@@ -3,10 +3,10 @@ const ExecutionDelay = class {
     #delay;
     #isThrottle;
     #context;
-    #args;
     #timeoutId;
     #promise;
     #resolve;
+    #reject;
     #fulfilled;
     #isTimeout = false;
 
@@ -18,7 +18,6 @@ const ExecutionDelay = class {
     * @param {boolean} [options.startNow=false] - Initiates execution immediately upon initialization (default: false).
     * @param {boolean} [options.executeNow=false] - Executes the function immediately upon initialization (default: false).
     * @param {boolean} [options.isThrottle=false] - Sets whether function calls are throttled (default: false).
-    * @param {boolean} [options.leading=false] - if true the first call will be executed immediately (default: false).
     * @param  {...any} args - Additional arguments to be passed to the function.
     */
     constructor(callback, {
@@ -41,6 +40,28 @@ const ExecutionDelay = class {
         }
     }
 
+    #arguments = [];
+    get #args() { return this.#arguments.length > 0 ? this.#arguments : this.#savedArgs; };
+    set #args(value) { this.#arguments = value; };
+
+    #savedArgs = [];
+    saveArguments = (...args) => {
+        this.#savedArgs = args;
+        return { start: this.start, execute: this.execute };
+    }
+
+    nextStart = async (...args) => {
+        if (this.#promise) {
+            return new Promise(async (resolve, reject) => {
+                this.#promise
+                    .then(() => resolve(this.start(...args)))
+                    .catch(reject);
+            });
+        }
+
+        return this.start(...args);
+    }
+
     get delay() { return this.#delay; }
     set delay(value) {
         if (typeof value !== 'number') { throw new TypeError(`The '${value}' is not 'number'`); }
@@ -59,75 +80,79 @@ const ExecutionDelay = class {
     getFunction = () => {
         return {
             function: this.#callback,
-            arguments: this.#args,
-            context: this.#context
+            arguments: this.#arguments,
+            context: this.#context,
+            savedArgs: this.#savedArgs
         }
     }
+
     setFunction = (callback, ...args) => {
         if (typeof callback != 'function') { throw new TypeError(`The '${callback}' is not a function.`); }
         this.#callback = callback;
-        if (args.length > 0) this.#args = args;
-        return {
-            start: this.start,
-            execute: this.execute,
-            setContext: this.setContext
-        };
+        this.#savedArgs = args;
+
+        return { start: this.start, execute: this.execute, setContext: this.setContext }
     }
 
-    setArgumetns = (...args) => {
-        if (args.length == 0) { return false }
-        this.#args = args;
-        return {
-            start: this.start,
-            execute: this.execute
-        };
-    }
-
-    clearArguments = () => { this.#args = undefined; }
+    clearArguments = () => { this.#savedArgs = []; }
 
     getContext = () => { return this.#context; }
     setContext = (context) => {
         if (typeof context != 'object' && context != null) {
             throw new TypeError(`The context is '${typeof context}', must be 'object or null.`);
         }
+
         this.#context = context;
-        return {
-            start: this.start,
-            execute: this.execute
-        };
+
+        return { start: this.start, execute: this.execute }
+    }
+
+    #apply = (args = this.#args) => {
+        let isError = false;
+        let result;
+        try {
+            result = this.#callback.apply(this.#context, args);
+        } catch (error) {
+            isError = true;
+            result = error;
+        }
+
+        isError ? this.#reject?.(result) : this.#resolve?.(result);
+        return result;
+    }
+
+    #timeout = () => {
+        this.#isTimeout = false;
+
+        if (typeof this.#resolve !== 'function') return;
+
+        this.#apply();
+
+        this.#resolve = null;
+        this.#reject = null;
+        this.#fulfilled = null;
+        this.#promise = null;
+
+        if (this.#isThrottle) this.#createTimeout();
     }
 
     #createTimeout = () => {
         clearTimeout(this.#timeoutId);
         this.#isTimeout = true;
 
-        this.#timeoutId = setTimeout(() => {
-            this.#isTimeout = false;
-            this.#promise = null;
-            this.#fulfilled = null;
-
-            if (typeof this.#resolve !== 'function') return;
-
-            let result;
-            try {
-                result = this.#callback.apply(this.#context, this.#args);
-            } catch (error) {
-                result = error;
-            }
-
-            this.#resolve(result);
-            this.#resolve = null;
-
-            if (this.#isThrottle) this.#createTimeout();
-        }, this.#delay);
+        this.#timeoutId = setTimeout(this.#timeout, this.#delay);
     }
+
     #createPromise = (needTimeout = false) => {
-        return this.#promise = new Promise((resolve) => {
+        this.#promise = new Promise((resolve, reject) => {
             // this.#fulfilled - function for set promise state to fulfilled with stop().
             this.#fulfilled = (message) => { resolve({ causeStops: message }); }
             this.#resolve = resolve;
-            if (needTimeout) this.#createTimeout(resolve);
+            this.#reject = reject;
+            if (needTimeout) this.#createTimeout();
         });
+
+        return this.#promise;
     }
     /**
      * Initiates function execution after the specified delay.
@@ -142,8 +167,7 @@ const ExecutionDelay = class {
             if (this.#isTimeout && this.#promise) return this.#promise;
             if (!this.#isTimeout && !this.#promise && this.leading) {
                 this.#createTimeout();
-                const result = this.#callback.apply(this.#context, this.#args);
-                return Promise.resolve(result);
+                return Promise.resolve(this.#apply());
             }
             if (this.#isTimeout && this.#promise === null) {
                 return this.#createPromise(false);
@@ -156,8 +180,7 @@ const ExecutionDelay = class {
                 return this.#promise;
             } else if (this.leading && !this.#resolve && !this.#isTimeout) {
                 this.#createTimeout();
-                const result = this.#callback.apply(this.#context, this.#args);
-                return Promise.resolve(result);
+                return Promise.resolve(this.#apply());
             }
         }
 
@@ -172,10 +195,11 @@ const ExecutionDelay = class {
     execute = (...args) => {
         this.stop("Execute now!");
         if (typeof this.#callback != 'function') { throw new Error('The function is missing.'); }
+
         if (args.length > 0) {
-            return this.#callback.apply(this.#context, args);
+            return this.#apply(args);
         }
-        return this.#callback.apply(this.#context, this.#args);
+        return this.#apply(this.#savedArgs);
     }
 
     /**
@@ -187,34 +211,37 @@ const ExecutionDelay = class {
         this.#isTimeout = false;
         this.#promise = null;
         this.#resolve = null;
+        this.#reject = null;
 
-        if (typeof this.#fulfilled == 'function') {
+        if (typeof this.#fulfilled === 'function') {
             this.#fulfilled(cause);
             this.#fulfilled = undefined;
         }
     }
 }
 
-function CustomEvents() {
-    const _listMicroTask = new Set();
+const CustomEvents = class {
+    events = new Map();
 
-    let _isMicroTask = false;
-    const _microTask = () => {
+    #listMicroTask = new Set();
+    #promise = { value: undefined, resolve: undefined }
+    #isMicroTask = false;
+
+    #microTask = () => {
         try {
-            _listMicroTask.forEach(type => {
+            this.#listMicroTask.forEach(type => {
                 this.events.get(type)?.forEach(listener => listener());
             });
         } catch (error) {
             console.warn(error);
         } finally {
-            _isMicroTask = false;
-            _listMicroTask.clear();
-            _promise.resolve();
+            this.#isMicroTask = false;
+            this.#listMicroTask.clear();
+            this.#promise.resolve();
         }
     }
 
-    this.events = new Map();
-    this.on = (type, listener) => {
+    on = (type, listener) => {
         if (this.events.get(type) === undefined) {
             this.events.set(type, new Set());
             this.events.get(type).add(listener);
@@ -222,7 +249,7 @@ function CustomEvents() {
         this.events.get(type).add(listener);
     }
 
-    this.off = (type, listener) => {
+    off = (type, listener) => {
         if (this.events.size === 1) {
             this.events.clear();
             return;
@@ -230,21 +257,19 @@ function CustomEvents() {
         this.events.get(type)?.delete(listener);
     }
 
-    const _promise = { value: undefined, resolve: undefined }
     /** the event will be execute on microtask  */
-    this.execute = async (type) => {
-        if (_listMicroTask.has(type)) _listMicroTask.delete(type);
-        _listMicroTask.add(type);
+    execute = async (type) => {
+        if (this.#listMicroTask.has(type)) this.#listMicroTask.delete(type);
+        this.#listMicroTask.add(type);
 
-        if (_isMicroTask) return _promise;
-        _isMicroTask = true;
-        queueMicrotask(_microTask);
-        _promise.value = new Promise(resolve => _promise.resolve = resolve);
-        return _promise.value;
-
+        if (this.#isMicroTask) return this.#promise;
+        this.#isMicroTask = true;
+        queueMicrotask(this.#microTask);
+        this.#promise.value = new Promise(resolve => this.#promise.resolve = resolve);
+        return this.#promise.value;
     }
 
-    this.has = (type) => { return this.events.has(type); }
+    has = (type) => { return this.events.has(type); }
 }
 
 class MethodInterceptor {
