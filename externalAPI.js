@@ -12,9 +12,11 @@ function generateApi () {
 
     externalAPI.on = externalApiOn;
     externalAPI.off = externalApiOff;
-// todo replace all fn
+    
     externalAPI.getControls = () => {
         const repeatModes = {
+            undefined: null,
+            null: null,
             "none": false,
             "context": true,
             "one": 1
