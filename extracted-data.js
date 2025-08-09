@@ -110,11 +110,13 @@ const State = {
     /** @returns {boolean} */
     getRepeat() {
         if (!State.queueState) return null;
+        if(State.isVibe) return null;
         return State.queueState.repeat.value;
     },
     /** @returns {boolean} */
     getShuffle() {
         if (!State.queueState) return null;
+        if(State.isVibe) return null;
         return State.queueState.shuffle.value;
     },
     /** @returns {boolean} */
@@ -293,36 +295,27 @@ const Tracks = {
 
             if (after === undefined) {
                 after = 25;
-                before = 15;
+                before ??= 15;
             }
+            before ??= 0;
 
-            const tracksSize = Tracks.primary.length - 1;
+            const lastIndex = Tracks.primary.length - 1;
             if (fromIndex < 0) fromIndex = 0;
-            if (fromIndex > tracksSize) fromIndex = tracksSize;
-            if (fromIndex + after > tracksSize) after = tracksSize + 1 - fromIndex;
+            if (fromIndex > lastIndex) fromIndex = lastIndex;
+            if (fromIndex + after > lastIndex) after = lastIndex + 1 - fromIndex;
             if (before > fromIndex) before = fromIndex + 1;
             
-            const {
-                unloadedTracks: afterTracks,
-                indexes: afterIndexes
-            } = Tracks.getUnloadedTracks(fromIndex, after, "down");
+            const unloadedAfterTracks = Tracks.getUnloadedTracks(fromIndex, after, "down");
+            const unloadedBeforeTracks = Tracks.getUnloadedTracks(fromIndex, before, "up");
+            const unloaded = new Map([...unloadedAfterTracks].concat([...unloadedBeforeTracks]));
 
-            let beforeTracks = [], beforeIndexes = [];
-            if (Number.isInteger(before)) {
-                ; ({
-                    unloadedTracks: beforeTracks,
-                    indexes: beforeIndexes
-                } = Tracks.getUnloadedTracks(fromIndex, before, "up"))
-            }
-
-            const indexes = Array.from(new Set(afterIndexes.concat(beforeIndexes)));
-
-            if (indexes.length === 0) {
+            if (unloaded.size === 0) {
                 resolve(true);
                 return;
             }
 
-            const unloadedTracks = Array.from(new Set(afterTracks.concat(beforeTracks)));
+            const indexes = Array.from(unloaded.keys());
+            const unloadedTracks = Array.from(unloaded.values());
 
             ExtractedData.loadEntities(unloadedTracks).then(tracks => {
                 const entities = ExtractedData.createEntities(tracks);
@@ -335,39 +328,27 @@ const Tracks = {
         });
     },
     getUnloadedTracks(fromIndex = State.index, quantity = 30, direction = "down") {
-        const unloadedTracks = [];
-        const indexes = [];
+        const unloadedTracks = new Map();
 
-        if (direction === "up") {
-            for (let i = fromIndex; i >= 0; i--) {
-                if (this.primary[i].entity.entityData.type !== "unloaded") continue;
-                if (unloadedTracks.length >= quantity) break;
-                unloadedTracks.push(this.primary[i]);
-                indexes.push(i);
-            }
-        } else if (direction === "down") {
-            for (let i = fromIndex; i < this.primary.length; i++) {
-                if (this.primary[i].entity.entityData.type !== "unloaded") continue;
-                if (unloadedTracks.length >= quantity) break;
-                unloadedTracks.push(this.primary[i]);
-                indexes.push(i);
-            }
+        switch (direction) {
+            case "up":
+                for (let i = fromIndex; i >= 0; i--) {
+                    if (this.primary[i].entity.entityData.type !== "unloaded") continue;
+                    if (unloadedTracks.size >= quantity) break;
+                    unloadedTracks.set(i, this.primary[i]);
+                }
+                break;
+
+            case "down":
+                for (let i = fromIndex; i < this.primary.length; i++) {
+                    if (this.primary[i].entity.entityData.type !== "unloaded") continue;
+                    if (unloadedTracks.size >= quantity) break;
+                    unloadedTracks.set(i, this.primary[i]);
+                }
+                break;
         }
-        return { unloadedTracks, indexes };
-    },
-    async uploadTracksMeta(direction) {
-        if (direction === undefined) return;
-        const { unloadedTracks, indexes } = Tracks.getUnloadedTracks(State.index, 30, direction);
-        if (indexes.length === 0) return;
 
-        ExtractedData.loadEntities(unloadedTracks).then(tracks => {
-            const entities = ExtractedData.createEntities(tracks);
-            indexes.forEach((indexOriginal, index) => {
-                Tracks.primary[indexOriginal].entity = entities[index];
-            });
-            Tracks.updateConverted();
-            customEvents.execute(externalAPI.EVENT_TRACKS_LIST);
-        }).catch((reason) => { console.log(reason) });
+        return unloadedTracks;
     }
 }
 
@@ -420,7 +401,7 @@ const Toggles = {
             return;
         }
 
-        ExtractedData.likeStore.toggleTrackDisike(Toggles.likeDislikeData);
+        ExtractedData.likeStore.toggleTrackDislike(Toggles.likeDislikeData);
         Tracks.current.disliked = State.getTrackDisliked(Tracks.currentId);
 
     },
@@ -552,7 +533,12 @@ const {
 } = new MethodInterceptor({ Controller, Toggles }, ExtractedData.callIfUnblocked);
 
 Object.setPrototypeOf(externalAPI, Object.defineProperties({}, {
-    dev: { value: { Controller, ExtractedData, State, Tracks, Toggles } }
+    dev: {
+        value: {
+            Controller, ExtractedData, State, Tracks, Toggles,
+            Events: customEvents
+        }
+    }
 }));
 
 export { State, Tracks, Toggles }
