@@ -6,7 +6,7 @@ export const Controller = {};
 DataReady.ready(({ controller, playbackController: playback }) => {
     Object.assign(Controller, controller);
     Object.setPrototypeOf(Controller, Object.getPrototypeOf(controller));
-    ExtractedData.playback = playback;
+    ExtractedData.playbackController = playback.playbackController;
 }, false, ...EXPECTED_DATA);
 
 const NUMBER_OF_VIBE_TRACKS = 7;
@@ -21,7 +21,6 @@ externalAPI.on(externalAPI.EVENT_TRACK, () => {
 const updateVibePlaylist = new ExecutionDelay(() => {
     Controller.contextController.currentContext.onMoveForward(Controller);
 }, { delay: 7000, isThrottle: true, leading: true }).start;
-
 
 const ExtractedData = {
     get user() {
@@ -44,8 +43,8 @@ const ExtractedData = {
         return this.queueController.contextController.createEntities(entities);
     },
     callIfUnblocked(callback, ...args) {
-        return ExtractedData.playback.playbackController.callIfUnblocked(() => {
-           return callback.apply(this, args);
+        return ExtractedData.playbackController.callIfUnblocked(() => {
+            return callback.apply(this, args);
         });
     }
 }
@@ -110,13 +109,13 @@ const State = {
     /** @returns {boolean} */
     getRepeat() {
         if (!State.queueState) return null;
-        if(State.isVibe) return null;
+        if (State.isVibe) return null;
         return State.queueState.repeat.value;
     },
     /** @returns {boolean} */
     getShuffle() {
         if (!State.queueState) return null;
-        if(State.isVibe) return null;
+        if (State.isVibe) return null;
         return State.queueState.shuffle.value;
     },
     /** @returns {boolean} */
@@ -304,7 +303,7 @@ const Tracks = {
             if (fromIndex > lastIndex) fromIndex = lastIndex;
             if (fromIndex + after > lastIndex) after = lastIndex + 1 - fromIndex;
             if (before > fromIndex) before = fromIndex + 1;
-            
+
             const unloadedAfterTracks = Tracks.getUnloadedTracks(fromIndex, after, "down");
             const unloadedBeforeTracks = Tracks.getUnloadedTracks(fromIndex, before, "up");
             const unloaded = new Map([...unloadedAfterTracks].concat([...unloadedBeforeTracks]));
@@ -370,7 +369,7 @@ const Toggles = {
                 Toggles.togglePause(false);
                 return Promise.resolve();
             }
-            return Toggles.play(State.index - 1); // todo
+            return Toggles.play(State.index - 1); 
         }
         if (!externalAPI.getControls().prev) return Promise.resolve();
         return new Promise((resolve) => {
@@ -384,27 +383,33 @@ const Toggles = {
     setSpeed(value) { unblockedController.setSpeed(value); },
     /** @returns {void} */
     setVolume(value) { unblockedController.setVolume(value); },
-    /** @returns {void} */
-    toggleTrackLike() { // todo call if unblocked
-        if (!Toggles.likeDislikeData.userId) {
-            console.warn("userId not available");
-            return;
+    _likeDislikeData: {
+        get albumId() { return Tracks.current.album.id; },
+        get entityId() { return Tracks.currentId; },
+        get userId() {
+            if (!ExtractedData.user) return null;
+            return ExtractedData.user.uid;
         }
+    },
+    /** @returns {void} */
+    toggleTrackLike() { 
+        if (!Toggles._likeDislikeData.userId) throw new Error("userId not available");
 
-        ExtractedData.likeStore.toggleTrackLike(Toggles.likeDislikeData);
+        ExtractedData.likeStore.toggleTrackLike(Toggles._likeDislikeData);
         Tracks.current.liked = State.getTrackLiked(Tracks.currentId);
     },
     /** @returns {void} */
-    toggleTrackDisike() {
-        if (!Toggles.likeDislikeData.userId) {
-            console.warn("userId not available");
-            return;
+    toggleTrackDisike: (function () {
+        const nextTrack = new ExecutionDelay(() => { Toggles.next(); }, { delay: 300 }).start;
+
+        return function () {
+            if (!Toggles._likeDislikeData.userId) throw new Error("userId not available");
+
+            ExtractedData.likeStore.toggleTrackDislike(Toggles._likeDislikeData);
+            Tracks.current.disliked = State.getTrackDisliked(Tracks.currentId);
+            Tracks.current.disliked && nextTrack();
         }
-
-        ExtractedData.likeStore.toggleTrackDislike(Toggles.likeDislikeData);
-        Tracks.current.disliked = State.getTrackDisliked(Tracks.currentId);
-
-    },
+    })(),
     _prevVolume: 1,
     /** @returns {void} */
     toggleMute(state) {
@@ -429,7 +434,7 @@ const Toggles = {
             } else {
                 unblockedController.resume();
             }
-            return;         
+            return;
         }
         unblockedController.togglePause();
     },
@@ -474,7 +479,7 @@ const Toggles = {
             if (index < 0) index = 0;
 
             nextPrevProm.add(resolve);
-            
+
             let result;
             if (State.isVibe) {
                 if (NUMBER_OF_VIBE_TRACKS < Tracks.primary.length) {
@@ -515,15 +520,7 @@ const Toggles = {
             entitiesData: undefined,
             loadContextMeta: State.isVibe ? undefined : true
         }
-    },
-    likeDislikeData: {
-        get albumId() { return Tracks.current.album.id; },
-        get entityId() { return Tracks.currentId; },
-        get userId() {
-            if (!ExtractedData.user) return null;
-            return ExtractedData.user.uid;
-        }
-    },
+    }
 }
 
 // use only for method calls
