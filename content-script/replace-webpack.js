@@ -1,6 +1,6 @@
 (function () {
     const EXPECTED_DATA = ["controller", 'playbackController'];
-    const redefinedFn = ["createAudioAdvertPlayback", "setExponentVolume"];
+    const REDEFINED_FN = ["createAudioAdvertPlayback", "setExponentVolume"];
 
     const DataReady = {
         waitingList: new Map(),
@@ -46,6 +46,9 @@
                 this.waitingList.delete(arg);
             }
             return this;
+        },
+        has(...expectedData) {
+            return expectedData.every(value => this.data.has(value));
         }
     }
 
@@ -53,9 +56,9 @@
     window.DataReady = DataReady;
 
     DataReady.ready(() => {
-        webpackChunk_N_E.push = push;
+        webpackChunk_N_E.push = pushBound;
         self.webpackChunk_N_E = webpackChunk_N_E;
-    }, true, ...redefinedFn);
+    }, true, ...REDEFINED_FN);
 
     function overrideExportsFn(exports) {
         if (exports === undefined) return;
@@ -64,11 +67,12 @@
                 const createAudioAdvertPlayback = exports[key].prototype.createAudioAdvertPlayback;
                 exports[key].prototype.createAudioAdvertPlayback = function (playback) {
                     DataReady.set(EXPECTED_DATA[1], playback); // playbackController
+                    exports[key].prototype.createAudioAdvertPlayback = createAudioAdvertPlayback;
                     createAudioAdvertPlayback.call(this, playback);
                 }
 
-                DataReady.set(redefinedFn[0], true);
-                if (DataReady.data.get(redefinedFn[1])) break;
+                DataReady.set(REDEFINED_FN[0], true);
+                if (DataReady.data.get(REDEFINED_FN[1])) break;
             }
 
             if (exports[key]?.prototype?.setExponentVolume) {
@@ -81,30 +85,41 @@
                     return setExponentVolume.call(this, v);
                 }
 
-                DataReady.set(redefinedFn[1], true);
-                if (DataReady.data.get(redefinedFn[0])) break;
+                DataReady.set(REDEFINED_FN[1], true);
+                if (DataReady.data.get(REDEFINED_FN[0])) break;
             }
         }
     }
 
-    let push;
-    function pushOverload(e, ...args) {
-        if (Array.isArray(e)) {
-            for (const entries of Object.entries(e[1])) {
-                e[1][entries[0]] = function (e, t, i) {
+    function replaceFn(args) {
+        if (Array.isArray(args[0])) {
+            for (const entries of Object.entries(args[0][1])) {
+                args[0][1][entries[0]] = function (e, t, i) {
                     entries[1](e, t, i); // originFn
                     overrideExportsFn(t);
                 }
             }
         }
-        push(e, ...args);
+    }
+
+    let pushBound;
+    function pushOverload(...args) {
+        replaceFn(args);
+        pushBound.apply(this, args);
     }
 
     const webpackChunk_N_E = [];
+    const pushOrig = webpackChunk_N_E.push;
+
+    webpackChunk_N_E.push = function (...args) { // push overload before bind
+        replaceFn(args);
+        pushOrig.apply(this, args);
+    }
+
     self.webpackChunk_N_E = new Proxy(webpackChunk_N_E, {
         set(target, property, value) {
             if (property === "push") {
-                push = value;
+                pushBound = value;
                 target.push = pushOverload
                 return true;
             }
@@ -113,5 +128,5 @@
             return true;
         }
     });
-    
+
 })();
