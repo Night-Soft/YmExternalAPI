@@ -532,7 +532,7 @@ const {
 Object.setPrototypeOf(externalAPI, Object.defineProperties({}, {
     dev: {
         value: {
-            Controller, ExtractedData, State, Tracks, Toggles,
+            Controller, ExtractedData, DataReady, State, Tracks, Toggles,
             Events: customEvents
         }
     }
