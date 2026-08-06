@@ -25,7 +25,7 @@ const updateVibePlaylist = new ExecutionDelay(() => {
 const ExtractedData = {
     get user() {
         if (!this.likeStore) return null;
-        return this.likeStore.$treenode.root._initialSnapshot.user.account.data;
+        return this.likeStore.$treenode.root.value.user.account.data;
     },
     get likeStore() {
         return Controller.contextController.factory.entityFactory.likeStore;
@@ -33,6 +33,9 @@ const ExtractedData = {
     get queueController() {
         if (!Controller.queueController) return null;
         return Controller.queueController;
+    },
+    get entityMeta() {
+        return this.likeStore.$treenode.root.value.sonataState.$treenode.value.entityMeta;
     },
     async loadEntities(entities) {
         if (!this.queueController) throw new Error("The queueController is null!");
@@ -195,7 +198,8 @@ const Tracks = {
             artists: track.artists.map(artist => {
                 artist.title = artist.name;
                 return artist;
-            })
+            }),
+            derivedColors: track.derivedColors
         }
     },
     _updateVibeList() {
@@ -383,19 +387,11 @@ const Toggles = {
     setSpeed(value) { unblockedController.setSpeed(value); },
     /** @returns {void} */
     setVolume(value) { unblockedController.setVolume(value); },
-    _likeDislikeData: {
-        get albumId() { return Tracks.current.album.id; },
-        get entityId() { return Tracks.currentId; },
-        get userId() {
-            if (!ExtractedData.user) return null;
-            return ExtractedData.user.uid;
-        }
-    },
     /** @returns {void} */
     toggleTrackLike() { 
-        if (!Toggles._likeDislikeData.userId) throw new Error("userId not available");
+        if (!ExtractedData.entityMeta?.toggleLike) throw new Error("toggleLike not available");
 
-        ExtractedData.likeStore.toggleTrackLike(Toggles._likeDislikeData);
+        ExtractedData.entityMeta.toggleLike();
         Tracks.current.liked = State.getTrackLiked(Tracks.currentId);
     },
     /** @returns {void} */
@@ -403,9 +399,9 @@ const Toggles = {
         const nextTrack = new ExecutionDelay(() => { Toggles.next(); }, { delay: 300 }).start;
 
         return function () {
-            if (!Toggles._likeDislikeData.userId) throw new Error("userId not available");
+            if (!ExtractedData.entityMeta?.toggleDislike) throw new Error("toggleDislike not available");
 
-            ExtractedData.likeStore.toggleTrackDislike(Toggles._likeDislikeData);
+            ExtractedData.entityMeta?.toggleDislike();
             Tracks.current.disliked = State.getTrackDisliked(Tracks.currentId);
             Tracks.current.disliked && nextTrack();
         }
@@ -522,7 +518,7 @@ const Toggles = {
         }
     }
 }
-
+//1376
 // use only for method calls
 const {
     Controller: unblockedController,

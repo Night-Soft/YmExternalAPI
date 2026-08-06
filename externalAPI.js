@@ -63,6 +63,7 @@ function generateApi () {
         if (!playlist) {
             playlist = {
                 cover: "",
+                coverWithoutText: "",
                 link: "",
                 owner: "",
                 title: "",
@@ -74,6 +75,7 @@ function generateApi () {
             id: playlistId,
             playlistUuid: link,
             cover,
+            coverWithoutText,
             owner,
             title,
             type
@@ -87,6 +89,7 @@ function generateApi () {
 
         return {
             cover: cover ? cover.uri : "",
+            coverWithoutText: coverWithoutText ? coverWithoutText.uri : "",
             owner: owner ? owner.name : "",
             link: link ? link : "",
             title: title ? title : "",

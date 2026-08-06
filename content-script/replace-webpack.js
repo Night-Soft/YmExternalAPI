@@ -60,21 +60,11 @@
         self.webpackChunk_N_E = webpackChunk_N_E;
     }, true, ...REDEFINED_FN);
 
+
     function overrideExportsFn(exports) {
         if (exports === undefined) return;
+
         for (const key of Object.keys(exports)) {
-            if (exports[key]?.prototype?.createAudioAdvertPlayback) {
-                const createAudioAdvertPlayback = exports[key].prototype.createAudioAdvertPlayback;
-                exports[key].prototype.createAudioAdvertPlayback = function (playback) {
-                    DataReady.set(EXPECTED_DATA[1], playback); // playbackController
-                    exports[key].prototype.createAudioAdvertPlayback = createAudioAdvertPlayback;
-                    createAudioAdvertPlayback.call(this, playback);
-                }
-
-                DataReady.set(REDEFINED_FN[0], true);
-                if (DataReady.data.get(REDEFINED_FN[1])) break;
-            }
-
             if (exports[key]?.prototype?.setExponentVolume) {
                 const setExponentVolume = exports[key].prototype.setExponentVolume;
                 exports[key].prototype.setExponentVolume = function (v) {
@@ -91,11 +81,47 @@
         }
     }
 
+    function patchAdvertProvider(exportsObj) {
+        const memoObj = exportsObj.AdvertProvider;
+
+        if (!memoObj || memoObj.__patched) return false;
+
+        const originalRender = memoObj.type;
+
+        memoObj.type = function (props) {
+            const element = originalRender.apply(this, arguments);
+
+            if (element && element.props && 'value' in element.props) {
+
+                const createAudioAdvertPlayback = element.props.value?.createAudioAdvertPlayback;
+                if (!createAudioAdvertPlayback) {
+                    console.warn("Missing fn: createAudioAdvertPlayback");
+                    return;
+                }
+
+                element.props.value.createAudioAdvertPlayback = function (playback) {
+                    DataReady.set(EXPECTED_DATA[1], playback); // playbackController
+                    element.props.value.createAudioAdvertPlayback = createAudioAdvertPlayback;
+                    createAudioAdvertPlayback.call(this, playback);
+                }
+
+                DataReady.set(REDEFINED_FN[0], true);
+            }
+
+            return element;
+        };
+
+        memoObj.__patched = true;
+        return true;
+    }
+
     function replaceFn(args) {
         if (Array.isArray(args[0])) {
             for (const entries of Object.entries(args[0][1])) {
                 args[0][1][entries[0]] = function (e, t, i) {
                     entries[1](e, t, i); // originFn
+                    if (t.AdvertProvider) patchAdvertProvider(t);
+
                     overrideExportsFn(t);
                 }
             }
