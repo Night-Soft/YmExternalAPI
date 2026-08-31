@@ -42,7 +42,7 @@ const ExtractedData = {
         return this.queueController.entityLoader.entityProvider.loadEntities(entities);
     },
     createEntities(entities) {
-        if (!this.queueController) return null
+        if (!this.queueController) return null;
         return this.queueController.contextController.createEntities(entities);
     },
     callIfUnblocked(callback, ...args) {
@@ -476,24 +476,29 @@ const Toggles = {
 
             nextPrevProm.add(resolve);
 
-            let result;
-            if (State.isVibe) {
+            if (State.isVibe) { 
+                const needPlayContext = index < State.index;
+
                 if (NUMBER_OF_VIBE_TRACKS < Tracks.primary.length) {
                     index = Tracks.primary.length - NUMBER_OF_VIBE_TRACKS + index;
                 }
+                
+                let result;
                 if (index === Tracks.primary.length - 1) {
                     result = unblockedToggles._setQueueIndexValue(index);
                     ExtractedData.callIfUnblocked(updateVibePlaylist);
-                    Toggles._rejectPlay(reject, result);
-                    return;
+                } else if (needPlayContext) {
+                    result = unblockedController.playContext(Toggles.createPlayContext(index));
+                } else {
+                    // track switches without updating the tracklist
+                    result = unblockedToggles._setQueueIndexValue(index);
                 }
-                // track switches without updating the tracklist
-                result = unblockedToggles._setQueueIndexValue(index);
+
                 Toggles._rejectPlay(reject, result);
                 return;
             }
 
-            result = unblockedController.playContext(Toggles.createPlayContext(index));
+            const result = unblockedController.playContext(Toggles.createPlayContext(index));
             Toggles._rejectPlay(reject, result);
         });
 
@@ -509,9 +514,12 @@ const Toggles = {
     createPlayContext(index) {
         const context = State.currentContext;
         if (!context) throw new Error(`The context is ${context}`);
+        
+        const playContext = Controller.contextController.factory.createContext(context);
+        if (!playContext) throw new Error(`The playContext is ${playContext}`);
 
         return {
-            context,
+            context: playContext,
             queueParams: { index },
             entitiesData: undefined,
             loadContextMeta: State.isVibe ? undefined : true
