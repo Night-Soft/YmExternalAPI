@@ -104,10 +104,23 @@ const State = {
     },
     /** @returns {number} */
     get index() {
-        if (this.queueIndex === -1) return -1;
-        if (this.playlist?.type !== "vibe") return this.queueIndex;
-        if (NUMBER_OF_VIBE_TRACKS > Tracks.primary.length) return this.queueIndex;
-        return this.queueIndex - (Tracks.primary.length - NUMBER_OF_VIBE_TRACKS);
+        const queueIndex = this.queueIndex;
+
+        if (queueIndex === -1) return -1;
+        if (this.playlist?.type !== "vibe") return queueIndex;
+
+        let idx = -1;
+        const lenVibeTracks = Tracks.vibeExistsEntity.length;
+        const currentTrack = Tracks.primary[queueIndex];
+        for (let i = 0; i < lenVibeTracks; i++) {
+            if (currentTrack !== Tracks.vibeExistsEntity[i]) continue;
+            idx = i;
+            break;
+        }
+
+        return idx;
+        if (NUMBER_OF_VIBE_TRACKS > Tracks.primary.length) return queueIndex;
+        // this.queueIndex - (Tracks.primary.length - NUMBER_OF_VIBE_TRACKS); 61 - (71 - 7)
     },
     /** @returns {boolean} */
     getRepeat() {
@@ -203,28 +216,16 @@ const Tracks = {
         }
     },
     _updateVibeList() {
-        const start = this.primary.length - NUMBER_OF_VIBE_TRACKS;
-
-        if (start < 0) {
-            this._converted = this.primary.map(item => {
-                return this.convertTrack(item.entity.entityData.meta);
-            });
-            return;
-        }
-
-        if (this.primary.length >= this.converted.length) {
-            for (let i = 0, j = start; i < this.converted.length; i++, j++) {
-                const title = this.primary[j].entity.entityData.meta.title;
-                if (title !== this.converted[i].title) break;
-                return;
-            }
-        }
-
         this._converted = [];
-        for (let i = start; i < this.primary.length; i++) {
+        this.vibeExistsEntity = [];
+        for (let i = 0; i < this.primary.length; i++) {
+            const title = this.primary[i].entity.entityData.meta.title;
+            if (title === undefined) continue;
             const track = this.convertTrack(this.primary[i].entity.entityData.meta);
             this._converted.push(track);
+            this.vibeExistsEntity.push(this.primary[i]);
         }
+
     },
     _updateRegularList() {
         let start = 0;
@@ -263,13 +264,14 @@ const Tracks = {
 
         if (State.isVibe) {
             this._updateVibeList();
-            return this._converted;
+           return this._converted;
         }
 
         this._updateRegularList();
         return this._converted;
     },
     _converted: [],
+    vibeExistsEntity: [],
     get converted() { return this._converted; },
     set converted(value) { this._converted = value; },
     clearConverted() { this._converted = []; },
@@ -477,21 +479,29 @@ const Toggles = {
             nextPrevProm.add(resolve);
 
             if (State.isVibe) { 
-                const needPlayContext = index < State.index;
+                let realIndex = -1;
+                const currentTrackEntity = Tracks.vibeExistsEntity[index];
+                for (let i = 0; i < Tracks.primary.length; i++) {
+                    if (currentTrackEntity !== Tracks.primary[i]) continue;
+                    realIndex = i;
+                    break;
+                }
 
-                if (NUMBER_OF_VIBE_TRACKS < Tracks.primary.length) {
-                    index = Tracks.primary.length - NUMBER_OF_VIBE_TRACKS + index;
+                if(realIndex === -1 || currentTrackEntity === undefined) {
+                    throw new Error("Errro get vibe track index");
                 }
                 
+                const needPlayContext = realIndex < State.queueIndex;
+                
                 let result;
-                if (index === Tracks.primary.length - 1) {
-                    result = unblockedToggles._setQueueIndexValue(index);
+                if (realIndex === Tracks.primary.length - 1) {
+                    result = unblockedToggles._setQueueIndexValue(realIndex);
                     ExtractedData.callIfUnblocked(updateVibePlaylist);
                 } else if (needPlayContext) {
-                    result = unblockedController.playContext(Toggles.createPlayContext(index));
+                    result = unblockedController.playContext(Toggles.createPlayContext(realIndex));
                 } else {
                     // track switches without updating the tracklist
-                    result = unblockedToggles._setQueueIndexValue(index);
+                    result = unblockedToggles._setQueueIndexValue(realIndex);
                 }
 
                 Toggles._rejectPlay(reject, result);
